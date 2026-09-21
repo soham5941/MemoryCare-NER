@@ -1,145 +1,119 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AnalyzeButton from "./components/AnalyzeButton";
 import Disclaimer from "./components/Disclaimer";
 import EntityLegend from "./components/EntityLegend";
 import EntityResults from "./components/EntityResults";
-import Header from "./components/Header";
 import HighlightedText from "./components/HighlightedText";
 import LoadingState from "./components/LoadingState";
 import Statistics from "./components/Statistics";
 import TextInput from "./components/TextInput";
 import { analyzeText } from "./services/api";
 
-const SAMPLE_NOTE =
-  "Patient is a 68-year-old individual reporting progressive memory loss and increasing confusion over the past six months. Family members report difficulty remembering recent events. The patient is currently taking Donepezil. A cognitive assessment and MRI of the brain are planned.";
+const USERS_KEY = "memorycare_users";
+const SESSION_KEY = "memorycare_session";
+const RESULTS_KEY = "memorycare_game_results";
+const DEFAULT_USERS = [
+  { name: "Raj", email: "elder@memorycare.demo", password: "123456", role: "elder" },
+  { name: "Priya", email: "caregiver@memorycare.demo", password: "123456", role: "caregiver" },
+];
+const SAMPLE_RESULTS = [
+  { user: "elder@memorycare.demo", game: "Memory Match", score: 80, accuracy: 80, attempts: 5, timestamp: "2026-09-21T09:30:00" },
+  { user: "elder@memorycare.demo", game: "Number Sequence", score: 90, accuracy: 90, attempts: 5, timestamp: "2026-09-20T10:15:00" },
+];
+const sequenceLevels = [
+  { numbers: [2, 4, 6], answer: 8, options: [7, 8, 9] },
+  { numbers: [5, 10, 15], answer: 20, options: [18, 20, 25] },
+  { numbers: [10, 20, 30], answer: 40, options: [35, 40, 50] },
+  { numbers: [3, 6, 9], answer: 12, options: [10, 12, 15] },
+  { numbers: [20, 18, 16], answer: 14, options: [12, 13, 14] },
+];
+
+function readJson(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function saveResult(session, result) {
+  const results = readJson(RESULTS_KEY, []);
+  results.unshift({ ...result, user: session.email, timestamp: new Date().toISOString() });
+  localStorage.setItem(RESULTS_KEY, JSON.stringify(results.slice(0, 50)));
+}
+function navigate(path) { window.history.pushState({}, "", path); window.dispatchEvent(new PopStateEvent("popstate")); }
+function getSession() { return readJson(SESSION_KEY, null); }
 
 function App() {
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState(null);
-  const [error, setError] = useState("");
-
-  const handleAnalyze = async () => {
-    if (!text.trim()) {
-      setResults(null);
-      setError("Enter some clinical text before starting an analysis.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setResults(null);
-
-    try {
-      // Send the exact displayed text so entity offsets remain valid for highlighting.
-      const response = await analyzeText(text);
-      setResults(response);
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to analyze the text. Please make sure the backend services are running.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLoadSample = () => {
-    setText(SAMPLE_NOTE);
-    setResults(null);
-    setError("");
-  };
-
-  const handleClear = () => {
-    setText("");
-    setResults(null);
-    setError("");
-  };
-
-  const entities = Array.isArray(results?.entities) ? results.entities : [];
-
-  return (
-    <div className="app-shell">
-      <Header />
-
-      <main className="dashboard" id="main-content">
-        <section className="workspace-grid" aria-label="NER workspace">
-          <section className="panel input-panel" aria-labelledby="input-title">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Step 1</p>
-                <h1 id="input-title">Input clinical text</h1>
-              </div>
-              <span className="demo-chip">Fictional data only</span>
-            </div>
-
-            <TextInput value={text} onChange={setText} disabled={loading} />
-
-            <div className="action-row">
-              <div className="secondary-actions">
-                <button className="secondary-button" type="button" onClick={handleLoadSample} disabled={loading}>
-                  Load sample
-                </button>
-                <button
-                  className="secondary-button secondary-button--quiet"
-                  type="button"
-                  onClick={handleClear}
-                  disabled={loading || (!text && !results && !error)}
-                >
-                  Clear
-                </button>
-              </div>
-              <AnalyzeButton loading={loading} onClick={handleAnalyze} />
-            </div>
-
-            {error ? (
-              <div className="error-message" role="alert">
-                <span className="error-mark" aria-hidden="true">!</span>
-                <p>{error}</p>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="panel results-panel" aria-labelledby="results-title">
-            <div className="panel-heading results-heading">
-              <div>
-                <p className="eyebrow">Step 2</p>
-                <h2 id="results-title">Analysis results</h2>
-              </div>
-              {results ? <span className="complete-chip">Analysis complete</span> : null}
-            </div>
-
-            {loading ? <LoadingState /> : null}
-
-            {!loading && results ? (
-              <div className="results-content">
-                <Statistics entities={entities} statistics={results.statistics} />
-                <EntityResults entities={entities} />
-              </div>
-            ) : null}
-
-            {!loading && !results ? (
-              <div className="results-empty" aria-live="polite">
-                <span className="empty-marker" aria-hidden="true">+</span>
-                <div>
-                  <h3>Ready when you are</h3>
-                  <p>Enter a fictional healthcare note, then select Analyze Text to view extracted entities.</p>
-                </div>
-              </div>
-            ) : null}
-          </section>
-        </section>
-
-        <HighlightedText text={text} entities={results ? entities : []} hasAnalysis={Boolean(results)} />
-
-        <section className="support-grid" aria-label="Entity reference and safety notice">
-          <EntityLegend />
-          <Disclaimer />
-        </section>
-      </main>
-    </div>
-  );
+  const [path, setPath] = useState(window.location.pathname || "/login");
+  const [session, setSession] = useState(getSession);
+  useEffect(() => {
+    if (!localStorage.getItem(USERS_KEY)) localStorage.setItem(USERS_KEY, JSON.stringify(DEFAULT_USERS));
+    const handlePopState = () => setPath(window.location.pathname || "/login");
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+  const go = (nextPath) => navigate(nextPath);
+  const login = (user) => { localStorage.setItem(SESSION_KEY, JSON.stringify(user)); setSession(user); go(user.role === "caregiver" ? "/caregiver" : "/elder"); };
+  const logout = () => { localStorage.removeItem(SESSION_KEY); setSession(null); go("/login"); };
+  if (path === "/ner") return <NerPage />;
+  if (path === "/login") return <LoginPage onLogin={login} onRegister={() => go("/register")} />;
+  if (path === "/register") return <RegisterPage onRegistered={login} onLogin={() => go("/login")} />;
+  if (!session) { go("/login"); return null; }
+  if (session.role === "caregiver") return path === "/caregiver" ? <CaregiverPage session={session} onNavigate={go} onLogout={logout} /> : <Redirect target="/caregiver" onNavigate={go} />;
+  if (path === "/games/memory") return <MemoryGame session={session} onNavigate={go} onLogout={logout} />;
+  if (path === "/games/sequence") return <SequenceGame session={session} onNavigate={go} onLogout={logout} />;
+  if (path === "/games") return <GamesPage onNavigate={go} onLogout={logout} />;
+  if (path === "/elder") return <ElderPage session={session} onNavigate={go} onLogout={logout} />;
+  return <Redirect target="/elder" onNavigate={go} />;
 }
 
+function Redirect({ target, onNavigate }) { useEffect(() => onNavigate(target), [onNavigate, target]); return null; }
+function Header({ session, onNavigate, onLogout, current }) {
+  return <header className="memory-header"><button className="memory-brand" onClick={() => onNavigate(session?.role === "caregiver" ? "/caregiver" : "/elder")} type="button"><span className="memory-brand-mark">MC</span><span><strong>MemoryCare</strong><small>Keep your mind active</small></span></button>{session ? <nav className="memory-nav" aria-label="Main navigation"><button className={current === "dashboard" ? "active" : ""} onClick={() => onNavigate(session.role === "caregiver" ? "/caregiver" : "/elder")} type="button">Dashboard</button>{session.role === "elder" ? <button className={current === "games" ? "active" : ""} onClick={() => onNavigate("/games")} type="button">Games</button> : null}<button className="logout-button" onClick={onLogout} type="button">Log out</button></nav> : null}</header>;
+}
+function PageShell({ children, session, onNavigate, onLogout, current }) { return <div className="memory-app"><Header session={session} onNavigate={onNavigate} onLogout={onLogout} current={current} /><main className="memory-main">{children}</main></div>; }
+
+function LoginPage({ onLogin, onRegister }) {
+  const [email, setEmail] = useState("elder@memorycare.demo"); const [password, setPassword] = useState("123456"); const [error, setError] = useState("");
+  const submit = (event) => { event.preventDefault(); if (!email.trim() || !password) return setError("Please enter your email and password."); const user = readJson(USERS_KEY, DEFAULT_USERS).find((item) => item.email.toLowerCase() === email.trim().toLowerCase() && item.password === password); if (!user) return setError("That email or password is not correct. Try the demo credentials below."); onLogin(user); };
+  return <div className="auth-page"><div className="auth-card"><div className="auth-intro"><span className="auth-mark">MC</span><p className="eyebrow">A simple daily companion</p><h1>Welcome to MemoryCare</h1><p>Gentle activities to keep your mind active, with progress that caregivers can understand.</p></div><form onSubmit={submit} className="auth-form"><h2>Log in</h2><label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" /></label>{error ? <p className="form-error" role="alert">{error}</p> : null}<button className="primary-button" type="submit">Log in</button><button className="text-button" type="button" onClick={onRegister}>Create a demo account</button><div className="demo-credentials"><strong>Demo accounts</strong><span>Elder: elder@memorycare.demo / 123456</span><span>Caregiver: caregiver@memorycare.demo / 123456</span></div></form></div></div>;
+}
+function RegisterPage({ onRegistered, onLogin }) {
+  const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [role, setRole] = useState("elder"); const [error, setError] = useState("");
+  const submit = (event) => { event.preventDefault(); if (!name.trim() || !email.trim() || !password.trim()) return setError("Please complete every field."); if (password.length < 6) return setError("Please use a password with at least 6 characters."); const users = readJson(USERS_KEY, DEFAULT_USERS); if (users.some((user) => user.email.toLowerCase() === email.trim().toLowerCase())) return setError("An account with that email already exists."); const user = { name: name.trim(), email: email.trim().toLowerCase(), password, role }; localStorage.setItem(USERS_KEY, JSON.stringify([...users, user])); onRegistered(user); };
+  return <div className="auth-page"><div className="auth-card auth-card--register"><div className="auth-intro"><span className="auth-mark">MC</span><p className="eyebrow">Set up your demo</p><h1>Create an account</h1><p>Choose an elder account to play activities or a caregiver account to view progress.</p></div><form onSubmit={submit} className="auth-form"><h2>Register</h2><label>Your name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Raj" /></label><label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" /></label><label>Account type<select value={role} onChange={(e) => setRole(e.target.value)}><option value="elder">Elder</option><option value="caregiver">Caregiver</option></select></label>{error ? <p className="form-error" role="alert">{error}</p> : null}<button className="primary-button" type="submit">Create account</button><button className="text-button" type="button" onClick={onLogin}>Back to login</button></form></div></div>;
+}
+function StatCard({ label, value, detail }) { return <div className="progress-card"><span>{label}</span><strong>{value}</strong>{detail ? <small>{detail}</small> : null}</div>; }
+function ElderPage({ session, onNavigate, onLogout }) {
+  const results = readJson(RESULTS_KEY, []).filter((result) => result.user === session.email); const latest = results[0]; const completed = results.length; const average = completed ? Math.round(results.reduce((sum, item) => sum + Number(item.accuracy || 0), 0) / completed) : 0;
+  return <PageShell session={session} onNavigate={onNavigate} onLogout={onLogout} current="dashboard"><div className="welcome-row"><div><p className="eyebrow">{formatDate(new Date())}</p><h1>Good morning, {session.name || "friend"}</h1><p className="page-lede">Let’s keep your mind active today.</p></div><span className="demo-pill">Demo activity</span></div><section className="stats-grid"><StatCard label="Cognitive progress" value={`${average || 0}%`} detail={completed ? "From your games" : "Start your first game"} /><StatCard label="Activities completed" value={completed} detail="Local demo record" /><StatCard label="Current streak" value={completed ? "1 day" : "—"} detail="Keep going" /></section><section className="section-block"><div className="section-heading"><div><p className="eyebrow">Choose an activity</p><h2>Play a game</h2></div><button className="text-button" type="button" onClick={() => onNavigate("/games")}>See all games</button></div><div className="game-preview-grid"><GameCard icon="◈" title="Memory Match" description="Find the matching pairs at your own pace." action={() => onNavigate("/games/memory")} /><GameCard icon="↗" title="Number Sequence" description="Choose the number that comes next." action={() => onNavigate("/games/sequence")} /></div></section><section className="two-column"><div className="simple-panel"><div className="section-heading"><div><p className="eyebrow">Recent progress</p><h2>{latest ? "Your latest activity" : "Your progress will appear here"}</h2></div></div>{latest ? <ActivityRow result={latest} /> : <p className="muted-copy">Complete a short game and your score will be saved on this device.</p>}</div><div className="simple-panel reminder-panel"><p className="eyebrow">Today’s routine</p><h2>A little practice goes a long way</h2><p className="muted-copy">Try one short activity today, then take a comfortable break.</p><button className="primary-button" type="button" onClick={() => onNavigate("/games")}>Start an activity</button></div></section></PageShell>;
+}
+function GamesPage({ onNavigate, onLogout }) { const session = getSession(); return <PageShell session={session} onNavigate={onNavigate} onLogout={onLogout} current="games"><div className="page-heading"><p className="eyebrow">Small steps, every day</p><h1>Choose a game</h1><p className="page-lede">Both activities are short, calm, and designed to be easy to follow.</p></div><div className="game-list"><GameCard icon="◈" title="Memory Match" description="Turn over two cards at a time and find all four pairs." meta="4 pairs · about 3 minutes" action={() => onNavigate("/games/memory")} /><GameCard icon="↗" title="Number Sequence" description="Look at the pattern and choose the next number." meta="5 questions · about 2 minutes" action={() => onNavigate("/games/sequence")} /></div></PageShell>; }
+function GameCard({ icon, title, description, meta, action }) { return <article className="game-card"><div className="game-icon" aria-hidden="true">{icon}</div><div className="game-card-copy"><h3>{title}</h3><p>{description}</p>{meta ? <small>{meta}</small> : null}</div><button className="primary-button" type="button" onClick={action}>Start game</button></article>; }
+function GameHeader({ title, subtitle, onBack }) { return <div className="game-header"><button className="back-button" type="button" onClick={onBack}>← Back to games</button><p className="eyebrow">Cognitive activity</p><h1>{title}</h1><p className="page-lede">{subtitle}</p></div>; }
+function GameResult({ result, onPlayAgain, onDone }) { return <div className="result-card"><span className="result-check">✓</span><p className="eyebrow">Activity complete</p><h2>Well done!</h2><div className="result-stats"><div><span>Score</span><strong>{result.score}%</strong></div><div><span>Accuracy</span><strong>{result.accuracy}%</strong></div><div><span>{result.game === "Memory Match" ? "Attempts" : "Questions"}</span><strong>{result.attempts}</strong></div></div><div className="result-actions"><button className="primary-button" type="button" onClick={onPlayAgain}>Play again</button><button className="secondary-button" type="button" onClick={onDone}>Back to dashboard</button></div></div>; }
+
+function MemoryGame({ session, onNavigate, onLogout }) {
+  const values = ["☀", "☀", "♥", "♥", "★", "★", "●", "●"]; const [cards, setCards] = useState(() => shuffle(values).map((value, index) => ({ id: index, value, matched: false }))); const [flipped, setFlipped] = useState([]); const [attempts, setAttempts] = useState(0); const [result, setResult] = useState(null); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (flipped.length !== 2) return; setBusy(true); setAttempts((count) => count + 1); const [first, second] = flipped.map((id) => cards.find((card) => card.id === id)); const timer = window.setTimeout(() => { const match = first.value === second.value; setCards((current) => current.map((card) => card.id === first.id || card.id === second.id ? { ...card, matched: card.matched || match } : card)); setFlipped([]); setBusy(false); }, 650); return () => window.clearTimeout(timer); }, [flipped]);
+  useEffect(() => { if (cards.length && cards.every((card) => card.matched) && !result) { const score = Math.max(0, Math.round((4 / Math.max(attempts, 4)) * 100)); const saved = { game: "Memory Match", score, accuracy: score, attempts }; saveResult(session, saved); setResult(saved); } }, [cards, attempts, result, session]);
+  const choose = (id) => { if (busy || result || flipped.includes(id) || cards.find((card) => card.id === id)?.matched) return; setFlipped((current) => [...current, id]); }; const reset = () => { setCards(shuffle(values).map((value, index) => ({ id: index, value, matched: false }))); setFlipped([]); setAttempts(0); setResult(null); };
+  return <PageShell session={session} onNavigate={onNavigate} onLogout={onLogout} current="games"><GameHeader title="Memory Match" subtitle="Find all four matching pairs. Take your time." onBack={() => onNavigate("/games")} />{result ? <GameResult result={result} onPlayAgain={reset} onDone={() => onNavigate("/elder")} /> : <section className="game-board-panel"><div className="game-score-row"><span>Attempts <strong>{attempts}</strong></span><span>Pairs found <strong>{cards.filter((card) => card.matched).length / 2} / 4</strong></span></div><div className="memory-grid">{cards.map((card) => { const visible = card.matched || flipped.includes(card.id); return <button key={card.id} className={`memory-card ${visible ? "is-visible" : ""}`} type="button" onClick={() => choose(card.id)} aria-label={visible ? `Card ${card.value}` : "Hidden card"}>{visible ? card.value : "?"}</button>; })}</div><button className="secondary-button" type="button" onClick={reset}>Restart game</button></section>}</PageShell>;
+}
+function SequenceGame({ session, onNavigate, onLogout }) {
+  const [level, setLevel] = useState(0); const [correct, setCorrect] = useState(0); const [selected, setSelected] = useState(null); const [finished, setFinished] = useState(false); const current = sequenceLevels[level];
+  const answer = (value) => { if (selected !== null) return; setSelected(value); const nextCorrect = correct + (value === current.answer ? 1 : 0); window.setTimeout(() => { if (level === sequenceLevels.length - 1) { const score = Math.round((nextCorrect / sequenceLevels.length) * 100); const saved = { game: "Number Sequence", score, accuracy: score, attempts: sequenceLevels.length }; saveResult(session, saved); setCorrect(nextCorrect); setFinished(saved); } else { setCorrect(nextCorrect); setLevel((item) => item + 1); setSelected(null); } }, 650); };
+  const reset = () => { setLevel(0); setCorrect(0); setSelected(null); setFinished(false); };
+  return <PageShell session={session} onNavigate={onNavigate} onLogout={onLogout} current="games"><GameHeader title="Number Sequence" subtitle="Look for the pattern, then choose what comes next." onBack={() => onNavigate("/games")} />{finished ? <GameResult result={finished} onPlayAgain={reset} onDone={() => onNavigate("/elder")} /> : <section className="game-board-panel sequence-panel"><div className="game-score-row"><span>Question <strong>{level + 1} / {sequenceLevels.length}</strong></span><span>Correct <strong>{correct}</strong></span></div><div className="sequence-question"><p>What number comes next?</p><div className="sequence-numbers">{current.numbers.map((number) => <span key={number}>{number}</span>)}<span className="sequence-question-mark">?</span></div></div><div className="answer-grid">{current.options.map((option) => <button key={option} className={`answer-button ${selected !== null ? option === current.answer ? "is-correct" : option === selected ? "is-wrong" : "" : ""}`} type="button" onClick={() => answer(option)} disabled={selected !== null}>{option}</button>)}</div></section>}</PageShell>;
+}
+function CaregiverPage({ session, onNavigate, onLogout }) {
+  const stored = readJson(RESULTS_KEY, []); const results = stored.length ? stored : SAMPLE_RESULTS; const average = Math.round(results.reduce((sum, result) => sum + Number(result.accuracy || 0), 0) / results.length); const low = results.find((result) => result.accuracy < 60); const today = new Date().toDateString(); const hasToday = stored.some((result) => new Date(result.timestamp).toDateString() === today);
+  return <PageShell session={session} onNavigate={onNavigate} onLogout={onLogout} current="dashboard"><div className="welcome-row"><div><p className="eyebrow">Caregiver view · {formatDate(new Date())}</p><h1>How is Raj doing?</h1><p className="page-lede">A simple view of recent cognitive activities.</p></div><span className="demo-pill">Demo insights only</span></div><section className="stats-grid"><StatCard label="Cognitive activity" value={`${average}%`} detail="Average game accuracy" /><StatCard label="Activities completed" value={stored.length || "6"} detail={stored.length ? "Saved on this device" : "Sample activity shown"} /><StatCard label="Current streak" value={stored.length ? "1 day" : "3 days"} detail="Demo estimate" /></section><section className="two-column caregiver-columns"><div className="simple-panel"><div className="section-heading"><div><p className="eyebrow">Recent activity</p><h2>Game results</h2></div></div><div className="activity-list">{results.slice(0, 5).map((result, index) => <ActivityRow result={result} key={`${result.timestamp}-${index}`} />)}</div>{!stored.length ? <p className="sample-note">Sample activity is shown until the elder completes a game on this device.</p> : null}</div><div className="simple-panel"><div className="section-heading"><div><p className="eyebrow">Helpful reminders</p><h2>Simple insights</h2></div></div><div className="insight-list">{low ? <p className="insight insight--warm"><strong>Gentle encouragement</strong>Consider encouraging another short activity after a break.</p> : null}{!hasToday ? <p className="insight"><strong>No activity today</strong>No activity has been completed today yet.</p> : <p className="insight insight--good"><strong>Activity completed today</strong>A game has been completed today. Nice work!</p>}{!low && hasToday ? <p className="insight insight--good"><strong>Steady progress</strong>Recent scores look consistent across activities.</p> : null}</div><p className="disclaimer-copy">These are demo insights from local game results, not medical or clinical alerts.</p></div></section></PageShell>;
+}
+function ActivityRow({ result }) { return <div className="activity-row"><div><strong>{result.game}</strong><span>{formatDate(new Date(result.timestamp))}</span></div><strong className="activity-score">{result.accuracy}%</strong></div>; }
+function formatDate(date) { return date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }); }
+function shuffle(items) { return [...items].sort(() => Math.random() - 0.5); }
+
+const SAMPLE_NOTE = "Patient is a 68-year-old individual reporting progressive memory loss and increasing confusion over the past six months. Family members report difficulty remembering recent events. The patient is currently taking Donepezil. A cognitive assessment and MRI of the brain are planned.";
+function NerPage() {
+  const [text, setText] = useState(""); const [loading, setLoading] = useState(false); const [results, setResults] = useState(null); const [error, setError] = useState(""); const entities = Array.isArray(results?.entities) ? results.entities : [];
+  const analyze = async () => { if (!text.trim()) return setError("Enter some clinical text before starting an analysis."); setLoading(true); setError(""); try { setResults(await analyzeText(text)); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Unable to analyze the text."); } finally { setLoading(false); } };
+  return <div className="app-shell"><header className="site-header"><div className="header-content"><button className="brand" type="button" onClick={() => navigate("/login")}><span className="brand-mark">MC</span><span><strong>MemoryCare NER</strong><small>Separate future module</small></span></button><span className="engine-status"><span className="status-dot" />NER Engine: Demo Mode</span></div></header><main className="dashboard"><section className="workspace-grid"><section className="panel input-panel"><div className="panel-heading"><div><p className="eyebrow">Separate module</p><h1>Input clinical text</h1></div><span className="demo-chip">Fictional data only</span></div><TextInput value={text} onChange={setText} disabled={loading} /><div className="action-row"><div className="secondary-actions"><button className="secondary-button" type="button" onClick={() => { setText(SAMPLE_NOTE); setResults(null); }}>Load sample</button><button className="secondary-button" type="button" onClick={() => { setText(""); setResults(null); setError(""); }}>Clear</button></div><AnalyzeButton loading={loading} onClick={analyze} /></div>{error ? <div className="error-message" role="alert"><span className="error-mark">!</span><p>{error}</p></div> : null}</section><section className="panel results-panel"><div className="panel-heading results-heading"><div><p className="eyebrow">Results</p><h2>Analysis results</h2></div></div>{loading ? <LoadingState /> : results ? <div className="results-content"><Statistics entities={entities} statistics={results.statistics} /><EntityResults entities={entities} /></div> : <div className="results-empty"><span className="empty-marker">+</span><div><h3>Ready when you are</h3><p>Analyze fictional text through the existing NER service.</p></div></div>}</section></section><HighlightedText text={text} entities={entities} hasAnalysis={Boolean(results)} /><section className="support-grid"><EntityLegend /><Disclaimer /></section></main></div>;
+}
 export default App;
