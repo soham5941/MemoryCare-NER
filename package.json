@@ -1,0 +1,15 @@
+{
+  "name": "memorycare-ner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Initial demonstration prototype for healthcare-text entity extraction.",
+  "scripts": {
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
+    "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run dev\"",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
